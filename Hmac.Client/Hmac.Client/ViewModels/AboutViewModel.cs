@@ -34,13 +34,13 @@ namespace Hmac.Client.ViewModels
             handler.ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true; 
             var client = HttpClientFactory.Create(handler);
 
-            //var response = await client.PostAsJsonAsync("http://192.168.9.164:5000/items", new Item
-            //{
-            //    Text = "This is an item",
-            //    Description = "This is an item description.",
-            //    Id = Guid.NewGuid().ToString()
-            //});
-            var response = await client.GetAsync("http://192.168.9.164:5000/items");
+            var response = await client.PostAsJsonAsync("http://...:3000/items", new Item
+            {
+                Text = "This is an item",
+                Description = "This is an item description.",
+                Id = Guid.NewGuid().ToString()
+            });
+            response = await client.GetAsync("http://192.168.9.164:3000/items");
 
             if (response.IsSuccessStatusCode)
             {

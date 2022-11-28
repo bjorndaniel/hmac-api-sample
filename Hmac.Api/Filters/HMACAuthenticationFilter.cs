@@ -12,7 +12,7 @@ namespace Hmac.Api.Filters
     public class HMACAuthenticationFilter : Attribute, IAuthorizationFilter
     {
         private const string AuthorizationHeader = "Authorization";
-    
+
         public async void OnAuthorization(AuthorizationFilterContext context)
         {
             bool hasAllowAnonymous = context.ActionDescriptor.EndpointMetadata.Any(em => em.GetType() == typeof(AllowAnonymousAttribute));
@@ -34,7 +34,7 @@ namespace Hmac.Api.Filters
             var appSettings = context.HttpContext.RequestServices.GetRequiredService<IConfiguration>();
             var apiKey = appSettings.GetValue<string>("ApiKey");
             var appId = appSettings.GetValue<string>("AppId");
-            
+
             if (!(await ValidateRequest(extractedApiKey.First(), apiKey, appId, context.HttpContext)))
             {
                 context.Result = new ContentResult
@@ -46,32 +46,35 @@ namespace Hmac.Api.Filters
             }
         }
 
+
         private async Task<bool> ValidateRequest(string extractedApiKey, string apiKey, string appId, HttpContext context)
         {
             var valueString = extractedApiKey.Split(" ")[1];
             var values = valueString.Split(":").ToList();
-            if(values.Count() == 4)
+            if (values.Count() == 4)
             {
                 var requestUri = HttpUtility.UrlEncode(context.Request.GetEncodedUrl());
+                context.Request.EnableBuffering();
+                
                 var bytes = new byte[context.Request.ContentLength ?? 0];
                 await context.Request.Body.ReadAsync(bytes);
                 var suppliedAppId = values[0];
                 var requestString = values[1];
                 var nonce = values[2];
                 var timeStamp = values[3];
-                
-                if(suppliedAppId != appId)
+
+                if (suppliedAppId != appId)
                 {
                     return false;
                 }
-                if(IsReplayRequest(nonce, timeStamp, context))
+                if (IsReplayRequest(nonce, timeStamp, context))
                 {
                     return false;
                 }
                 using var sha256 = SHA256.Create();
                 //Hashing the request body, any change in request body will result in different hash, we'll incure message integrity
                 var requestContentHash = sha256.ComputeHash(bytes);
-                var requestContentBase64String = bytes.Length == 0 ? string.Empty :  Convert.ToBase64String(requestContentHash);
+                var requestContentBase64String = bytes.Length == 0 ? string.Empty : Convert.ToBase64String(requestContentHash);
 
                 var signatureRawData = $"{appId}{context.Request.Method}{requestUri}{timeStamp}{nonce}{requestContentBase64String}";
                 var secretKeyByteArray = Convert.FromBase64String(apiKey);
@@ -80,11 +83,12 @@ namespace Hmac.Api.Filters
                 using var hmac = new HMACSHA256(secretKeyByteArray);
                 var signatureBytes = hmac.ComputeHash(signature);
                 var requestSignatureBase64String = Convert.ToBase64String(signatureBytes);
+                context.Request.Body = new MemoryStream(bytes);
                 return requestSignatureBase64String == requestString;
             }
             return false;
         }
-        
+
         private bool IsReplayRequest(string nonce, string requestTimeStamp, HttpContext context)
         {
             var memoryCache = context.RequestServices.GetService<IMemoryCache>();
